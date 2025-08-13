@@ -17,7 +17,7 @@ The goal here was to scaffold and run a simple "Hello World" extension to unders
 
 ---
 
-##Install Steps
+## Install Steps
 
 ### 1. Node.js (LTS)
 ```bash
@@ -40,7 +40,7 @@ npm -v
 echo "v$(node -v)" > .nvmrc
 ```
 
-###2. Visual Studio Code
+### 2. Visual Studio Code
 ```bash
 # Import Microsoft GPG key
 sudo apt install wget gpg
@@ -60,7 +60,7 @@ sudo apt install -y code
 code --version
 ```
 
-###3. Java JDK
+### 3. Java JDK
 ```bash
 # Install OpenJDK 17 (LTS)
 sudo apt update
@@ -71,7 +71,7 @@ java -version
 javac -version
 ```
 
-###4. Apache Maven
+### 4. Apache Maven
 ```bash
 # Install Maven from Ubuntu repositories
 sudo apt install -y maven
@@ -80,7 +80,7 @@ sudo apt install -y maven
 mvn -version
 ```
 
-###5. Git
+### 5. Git
 ```bash
 # Install Git
 sudo apt install -y git
