@@ -10,8 +10,6 @@ The goal here was to scaffold and run a simple "Hello World" extension to unders
 - **OS**: Ubuntu 24.04 LTS (dual boot with Windows 11)
 - **Node.js**: v22.18.0 (LTS)
 - **npm**: Installed with Node.js
-- **Java JDK**: OpenJDK 21 (LTS)
-- **Apache Maven**: v3.8.7
 - **Git**: Latest stable release
 - **Visual Studio Code**: Latest stable release
 
@@ -60,27 +58,7 @@ sudo apt install -y code
 code --version
 ```
 
-### 3. Java JDK
-```bash
-# Install OpenJDK 17 (LTS)
-sudo apt update
-sudo apt install -y default-jdk
-
-# Verify Java installation
-java -version
-javac -version
-```
-
-### 4. Apache Maven
-```bash
-# Install Maven from Ubuntu repositories
-sudo apt install -y maven
-
-# Verify Maven installation
-mvn -version
-```
-
-### 5. Git
+### 3. Git
 ```bash
 # Install Git
 sudo apt install -y git
@@ -95,5 +73,3 @@ git config --global user.email "you@example.com"
 #Check of it is correct
 git config --list
 ```
-
-
