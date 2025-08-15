@@ -3,11 +3,9 @@ import com.github.javaparser.ParseResult;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.body.*;
 import com.github.javaparser.ast.stmt.Statement;
-import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-
 import java.io.File;
 import java.util.*;
 
@@ -52,11 +50,13 @@ public class JavaParserCLI {
                     methodMap.put("parameters", method.getParameters().toString());
                     methodMap.put("returnType", method.getType().toString());
 
+                    // Line number of method declaration
+                    method.getBegin().ifPresent(pos -> methodMap.put("line", pos.line));
+
                     // Local variables
                     List<String> localVars = new ArrayList<>();
                     method.getBody().ifPresent(body -> {
                         for (Statement stmt : body.getStatements()) {
-                            // Detect local variable declarations
                             stmt.findAll(VariableDeclarationExpr.class).forEach(varDecl -> {
                                 localVars.add(varDecl.toString().trim());
                             });
@@ -64,11 +64,14 @@ public class JavaParserCLI {
                     });
                     methodMap.put("localVariables", localVars);
 
-                    // Method body statements
-                    List<String> bodyStatements = new ArrayList<>();
+                    // Method body statements + line numbers
+                    List<Map<String, Object>> bodyStatements = new ArrayList<>();
                     method.getBody().ifPresent(body -> {
                         for (Statement stmt : body.getStatements()) {
-                            bodyStatements.add(stmt.toString().trim());
+                            Map<String, Object> s = new LinkedHashMap<>();
+                            s.put("code", stmt.toString().trim());
+                            stmt.getBegin().ifPresent(pos -> s.put("line", pos.line));
+                            bodyStatements.add(s);
                         }
                     });
                     methodMap.put("body", bodyStatements);
