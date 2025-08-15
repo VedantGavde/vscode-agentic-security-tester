@@ -1,7 +1,7 @@
 {
-  "name": "hello-world-ext",
-  "displayName": "Hello World Extension",
-  "description": "A simple VS Code extension to learn the basics before building the AI-driven security debugger.",
+  "name": "java-ast-viewer",
+  "displayName": "Java AST Viewer",
+  "description": "Parses Java code into an AST JSON view inside VS Code.",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.103.0"
@@ -13,12 +13,12 @@
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
-      {
-        "command": "hello-world-ext.helloWorld",
-        "title": "Hello World"
-      }
+        {
+            "command": "extension.parseJava",
+            "title": "Parse Java File (AST)"
+        }
     ]
-  },
+},
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
