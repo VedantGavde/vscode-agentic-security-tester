@@ -11,7 +11,9 @@ export async function parseJavaAst(
 ): Promise<any> {
   return new Promise((resolve, reject) => {
     const parserFolder = path.join(context.extensionPath, "java-parser");
-    const cmd = `java -cp ".:${path.join(parserFolder, "*")}" JavaParserCLI "${filePath}"`;
+    const sep = process.platform === "win32" ? ";" : ":";
+    const cmd = `java -cp ".${sep}${path.join(parserFolder, "*")}" JavaParserCLI "${filePath}"`;
+
 
     cp.exec(cmd, { cwd: parserFolder }, (err, stdout, stderr) => {
       if (err) {
