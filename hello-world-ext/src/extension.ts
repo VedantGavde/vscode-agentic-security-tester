@@ -2,9 +2,10 @@ import * as vscode from "vscode";
 import { parseJavaAst } from "./ast/astParser";
 import { addBreakpointsFromAst } from "./breakpoint/breakpointEngine";
 import { listenForStateCapture } from "./debug/stateCapture";
+import { autoStartDebuggingForFile } from "./debug/launchManager";
 
 export function activate(context: vscode.ExtensionContext) {
-  // Register the new modular command
+  // Register the modular command
   const disposable = vscode.commands.registerCommand("extension.autoBreakpoint", async () => {
     const editor = vscode.window.activeTextEditor;
     if (!editor) {
@@ -14,19 +15,26 @@ export function activate(context: vscode.ExtensionContext) {
 
     const document = editor.document;
     const filePath = document.fileName;
-    if (!filePath.endsWith(".java")) {
+    if (!filePath.toLowerCase().endsWith(".java")) {
       vscode.window.showErrorMessage("The active file is not a Java file");
       return;
     }
 
     try {
-      // 1) Run JavaParserCLI and get AST JSON
+      // 1: Parse AST
       const astJson = await parseJavaAst(filePath, context);
 
-      // 2) Feed into our breakpoint engine
+      // 2: Inject breakpoints
       await addBreakpointsFromAst(astJson, document.uri);
-
       vscode.window.showInformationMessage("Breakpoints injected successfully.");
+
+      // 3: Auto-start debugging session for this Java file
+      const didStart = await autoStartDebuggingForFile(document);
+      if (!didStart) {
+        vscode.window.showWarningMessage(
+          "Could not auto-start debugging. Please run a debug session manually."
+        );
+      }
     } catch (err: any) {
       vscode.window.showErrorMessage(err?.message ?? "Unexpected error");
     }
@@ -34,7 +42,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(disposable);
 
-  // Passively start listening for breakpoint-hit (Day-4 work)
+  // Passive state-capture listener
   listenForStateCapture();
 }
 

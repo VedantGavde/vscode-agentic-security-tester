@@ -1,55 +1,59 @@
-import * as net from "net";
 import * as vscode from "vscode";
-import * as dap from "@vscode/debugadapter";
 
 /**
- * Connects to a DAP server (e.g., Java debugger) and listens for events.
- * Specifically captures "stopped" events when a breakpoint is hit.
+ * Logs and captures program state when breakpoints are hit,
+ * and automatically continues until the program terminates.
  */
 export function listenForStateCapture() {
-  const port = 4711; // must match the Java DAP server port
-  const socket = new net.Socket();
+  const outputChannel = vscode.window.createOutputChannel("State Capture");
 
-  socket.connect(port, "127.0.0.1", () => {
-    vscode.window.showInformationMessage("Connected to DAP server for state capture.");
+  // Attach tracker **globally** for Java debug sessions
+  vscode.debug.registerDebugAdapterTrackerFactory("java", {
+    createDebugAdapterTracker: (session) => {
+      outputChannel.appendLine(`✅ Tracker attached for type=${session.type}`);
 
-    const session = new dap.DebugSession();
-    session.setRunAsServer(true);
-    session.start(<any>socket, socket);
+      return {
+        onDidSendMessage: async (msg) => {
+          outputChannel.appendLine(`--> onDidSendMessage: ${JSON.stringify(msg)}`);
 
-    // Hook into breakpoint "stopped" events
-    session.on("event", (event) => {
-      if (event.event === "stopped") {
-        vscode.window.showInformationMessage("Breakpoint hit! Capturing state...");
+          if (msg.event === "stopped") {
+            const threadId = msg.body?.threadId;
+            outputChannel.appendLine(`⚠️ stopped, thread=${threadId}, reason=${msg.body?.reason}`);
 
-        // Request stack trace
-        session.sendRequest("stackTrace", { threadId: event.body.threadId }, 1000, (stackResp) => {
-          console.log("Stack Trace:", stackResp);
+            if (!threadId) return;
 
-          // Request variables for top frame
-          if (stackResp?.body?.stackFrames?.length > 0) {
-            const frameId = stackResp.body.stackFrames[0].id;
-            session.sendRequest("scopes", { frameId }, 1000, (scopesResp) => {
-              console.log("Scopes:", scopesResp);
+            try {
+              const stack = await session.customRequest("stackTrace", { threadId });
+              outputChannel.appendLine(`STACK: ${JSON.stringify(stack.stackFrames)}`);
 
-              if (scopesResp?.body?.scopes?.length > 0) {
-                const scopeId = scopesResp.body.scopes[0].variablesReference;
-                session.sendRequest("variables", { variablesReference: scopeId }, 1000, (varsResp) => {
-                  console.log("Captured Variables:", varsResp);
-
-                  // TODO: integrate with storage/ or ai/ modules
-                  vscode.window.showInformationMessage("Program state captured (check console).");
-                });
+              if (stack?.stackFrames?.length > 0) {
+                const frameId = stack.stackFrames[0].id;
+                const scopes = await session.customRequest("scopes", { frameId });
+                if (scopes?.scopes?.length > 0) {
+                  const vars = await session.customRequest("variables", {
+                    variablesReference: scopes.scopes[0].variablesReference,
+                  });
+                  outputChannel.appendLine(`VARS: ${JSON.stringify(vars.variables)}`);
+                }
               }
-            });
+
+              await session.customRequest("continue", { threadId });
+              outputChannel.appendLine(`▶️ continued thread ${threadId}`);
+            } catch (err) {
+              outputChannel.appendLine(`🚫 error: ${err}`);
+            }
           }
-        });
-      }
-    });
+        },
+      };
+    },
   });
 
-  socket.on("error", (err) => {
-    vscode.window.showErrorMessage(`DAP connection error: ${err.message}`);
+  vscode.debug.onDidStartDebugSession((session) => {
+    outputChannel.appendLine(`=== Debug Session Started: ${session.name} (type=${session.type}) ===`);
+  });
+
+  vscode.debug.onDidTerminateDebugSession((session) => {
+    outputChannel.appendLine(`=== Debug Session Ended: ${session.name} ===`);
   });
 }
 

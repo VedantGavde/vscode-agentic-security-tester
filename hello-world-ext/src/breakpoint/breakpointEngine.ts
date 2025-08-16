@@ -1,6 +1,4 @@
 import * as vscode from "vscode";
-import * as net from "net";
-import * as dap from "@vscode/debugadapter";
 
 /**
  * ------ CATEGORY MATCHING FUNCTIONS ------
@@ -55,35 +53,16 @@ function extractBreakpointLines(ast: any): number[] {
 }
 
 /**
- * Opens a raw DAP socket and sends a setBreakpoints request
+ * Adds breakpoints via VS Code Debug API (no raw DAP socket).
  */
-function sendBreakpointsViaDAP(lines: number[], documentUri: vscode.Uri) {
-  // Assuming Java debugger is listening on localhost:4711
-  const port = 4711;
-  const socket = new net.Socket();
-
-  socket.connect(port, "127.0.0.1", () => {
-    const session = new dap.DebugSession();
-    session.setRunAsServer(true);
-    session.start(<any>socket, socket);
-
-    const dapBreakpoints = lines.map((l) => ({
-      source: { path: documentUri.fsPath },
-      line: l,
-    }));
-
-    session.sendRequest(
-      "setBreakpoints",
-      {
-        source: { path: documentUri.fsPath },
-        breakpoints: dapBreakpoints,
-      },
-      1000,
-      (response) => {
-        console.log("DAP response:", response);
-      }
-    );
+function addBreakpoints(lines: number[], documentUri: vscode.Uri) {
+  const breakpoints: vscode.SourceBreakpoint[] = lines.map((line) => {
+    const location = new vscode.Location(documentUri, new vscode.Position(line - 1, 0)); 
+    return new vscode.SourceBreakpoint(location, true);
   });
+
+  vscode.debug.addBreakpoints(breakpoints);
+  console.log("Added breakpoints:", breakpoints);
 }
 
 /**
@@ -92,6 +71,6 @@ function sendBreakpointsViaDAP(lines: number[], documentUri: vscode.Uri) {
 export async function addBreakpointsFromAst(ast: any, uri: vscode.Uri): Promise<void> {
   const lines = extractBreakpointLines(ast);
   vscode.window.showInformationMessage(`Injecting breakpoints at: ${lines.join(", ")}`);
-  sendBreakpointsViaDAP(lines, uri);
+  addBreakpoints(lines, uri);
 }
 
