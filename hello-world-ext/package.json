@@ -10,13 +10,13 @@
     "Other"
   ],
   "activationEvents": [
-    "onCommand:extension.secTest"
+    "onCommand:extension.autoBreakpoint"
   ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "extension.secTest",
+        "command": "extension.autoBreakpoint",
         "title": "Security Test Extension"
       }
     ]
