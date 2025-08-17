@@ -1,70 +1,95 @@
+// src/debug/stateCapture.ts
+
 import * as vscode from "vscode";
 import { buildSnapshot } from "./captureFormatter";
-import { saveSnapshot, Snapshot } from "../storage/stateManager";
+import { Snapshot, saveSnapshotWithAnalysis } from "../storage/stateManager";
+import { analyzeWithLLM } from "../ai/llmAnalyzer";
 
 /**
  * Attach a global debug tracker for Java sessions.
- * Captures a snapshot on every stop, saves it, then auto-continues.
+ * Captures a snapshot on every stop, analyzes, saves it, then continues.
+ * Logs are kept minimal to avoid noise.
  */
 export function listenForStateCapture() {
-  const outputChannel = vscode.window.createOutputChannel("State Capture");
+  const output = vscode.window.createOutputChannel("State Capture");
 
   vscode.debug.registerDebugAdapterTrackerFactory("java", {
     createDebugAdapterTracker: (session) => {
-      outputChannel.appendLine(`Tracker attached for type=${session.type}`);
+      output.appendLine(`[Debug Tracker Attached] type=${session.type}`);
 
       return {
         onDidSendMessage: async (msg) => {
-          if (msg.event === "stopped") {
-            const threadId = msg.body?.threadId;
-            const reason = msg.body?.reason;
-            outputChannel.appendLine(`Stopped @ reason=${reason}, thread=${threadId}`);
+          if (msg.event !== "stopped") return;
 
-            if (!threadId) return;
+          const threadId = msg.body?.threadId;
+          const reason = msg.body?.reason;
+          if (!threadId) return;
 
+          try {
+            const snapshot: Snapshot = await buildSnapshot(session, threadId, reason);
+
+            const codeSlice = await getCodeContext(snapshot.file, snapshot.line);
+            const analysis = await analyzeWithLLM(snapshot, codeSlice);
+
+            // Minimal, single-line logs
+            output.appendLine(
+              `[Snapshot] ${snapshot.className}:${snapshot.line} | method=${snapshot.method?.signature ?? "?"} | vars=${summarizeLocals(snapshot)}`
+            );
+            output.appendLine(
+              `[Analysis] status=${analysis.status} | category=${analysis.category ?? "N/A"} | reason=${analysis.reasoning}`
+            );
+
+            const wsFolder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(snapshot.file));
+            if (wsFolder) {
+              await saveSnapshotWithAnalysis(snapshot, analysis, wsFolder);
+            }
+          } catch (e: any) {
+            const msgText = String(e?.message ?? e);
+            // Ignore "No stack frame found" (can happen at program end)
+            if (!/No stack frame found/i.test(msgText)) {
+              output.appendLine(`[Error] ${msgText}`);
+            }
+          } finally {
+            // Always continue to keep program running
             try {
-              const rich = await buildSnapshot(session, threadId, reason);
-
-              // Take only the top frame for our AI logic
-              const top = rich.callStack[0];
-              const snapshot: Snapshot = {
-                timestamp: rich.timestamp,
-                threadId: rich.threadId,
-                file: top.file,
-                className: extractClassName(top.file),
-                line: top.line,
-                variables: top.variables
-              };
-
-              outputChannel.appendLine(`Snapshot: ${JSON.stringify(snapshot)}`);
-
-              // Save to /states
-              const wsFolder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(snapshot.file));
-              if (wsFolder) {
-                await saveSnapshot(snapshot, wsFolder);
-              }
-
-              // continue execution
               await session.customRequest("continue", { threadId });
-            } catch (err) {
-              outputChannel.appendLine(`error: ${err}`);
+            } catch {
+              /* ignore */
             }
           }
-        }
+        },
       };
-    }
+    },
   });
 
-  vscode.debug.onDidStartDebugSession((session) => {
-    outputChannel.appendLine(`=== Debug Session Started: ${session.name} (type=${session.type}) ===`);
+  vscode.debug.onDidStartDebugSession((s) => {
+    output.appendLine(`=== Debug Session Started: ${s.name} (${s.type}) ===`);
   });
-
-  vscode.debug.onDidTerminateDebugSession((session) => {
-    outputChannel.appendLine(`=== Debug Session Ended: ${session.name} ===`);
+  vscode.debug.onDidTerminateDebugSession((s) => {
+    output.appendLine(`=== Debug Session Ended: ${s.name} ===`);
   });
 }
 
-function extractClassName(filePath: string): string {
-  return filePath.split(/[\\/]/).pop()?.replace(".java", "") || "Unknown";
+/** Compact variable summary for the log line. */
+function summarizeLocals(s: Snapshot): string {
+  const locals = Array.isArray((s as any).variables?.Local) ? (s as any).variables.Local : [];
+  const pairs = locals.map((v: any) => `${v.name}:${v.type || typeof v.value || "?"}`);
+  return pairs.join(", ");
+}
+
+/** Code context with sensible bounds and low noise. */
+async function getCodeContext(filePath: string, line: number): Promise<string> {
+  try {
+    const doc = await vscode.workspace.openTextDocument(filePath);
+    const before = 40;
+    const after = 40;
+    const start = Math.max(0, line - before);
+    const end = Math.min(doc.lineCount, line + after);
+    const out: string[] = [];
+    for (let i = start; i < end; i++) out.push(doc.lineAt(i).text);
+    return out.join("\n");
+  } catch {
+    return "";
+  }
 }
 

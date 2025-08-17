@@ -1,4 +1,7 @@
 import * as vscode from "vscode";
+import * as fs from "fs";
+import * as path from "path";
+import { Snapshot, MethodContext } from "../storage/stateManager";
 
 export interface RuntimeSnapshot {
   timestamp: number;
@@ -10,48 +13,82 @@ export interface RuntimeSnapshot {
     line: number;
     variables: any;
   }>;
-  // you can enrich with breakpoint category, taint metadata, etc.
 }
 
 /**
- * Build a rich snapshot of current runtime state
+ * Extract method signature + args (very basic for Java).
+ */
+function extractMethodContext(frameName: string, variables: any): MethodContext {
+  const args: Record<string, any> = {};
+  if (variables["Local"]) {
+    for (const v of variables["Local"]) {
+      args[v.name] = v.value;
+    }
+  }
+
+  return {
+    name: frameName,
+    signature: `${frameName}(${Object.keys(args).join(", ")})`,
+    args,
+    returnType: "unknown",
+  };
+}
+
+/**
+ * Try to collect imports from the source file (best-effort).
+ */
+function extractImports(filePath: string): string[] {
+  try {
+    const src = fs.readFileSync(filePath, "utf-8");
+    return src
+      .split("\n")
+      .filter((line) => line.startsWith("import "))
+      .map((line) => line.replace("import", "").replace(";", "").trim());
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Build a rich snapshot of current runtime state.
  */
 export async function buildSnapshot(
   session: vscode.DebugSession,
   threadId: number,
   stopReason?: string
-): Promise<RuntimeSnapshot> {
-  const snapshot: RuntimeSnapshot = {
-    timestamp: Date.now(),
-    threadId,
-    reason: stopReason,
-    callStack: [],
-  };
-
-  // Walk the full stack
+): Promise<Snapshot> {
   const stackResponse = await session.customRequest("stackTrace", { threadId });
   const frames = stackResponse?.stackFrames ?? [];
+  const topFrame = frames[0]; // focus on top-most frame
 
-  for (const frame of frames) {
-    const scopesResp = await session.customRequest("scopes", { frameId: frame.id });
-    const scopes = scopesResp?.scopes ?? [];
-
-    let variables: any = {};
-    // Merge variables from all scopes
-    for (const scope of scopes) {
-      const varsResp = await session.customRequest("variables", {
-        variablesReference: scope.variablesReference,
-      });
-      variables[scope.name] = varsResp.variables;
-    }
-
-    snapshot.callStack.push({
-      frameName: frame.name,
-      file: frame.source?.path ?? "unknown",
-      line: frame.line,
-      variables,
-    });
+  if (!topFrame) {
+    throw new Error("No stack frame found.");
   }
+
+  const scopesResp = await session.customRequest("scopes", { frameId: topFrame.id });
+  const scopes = scopesResp?.scopes ?? [];
+
+  let variables: any = {};
+  for (const scope of scopes) {
+    const varsResp = await session.customRequest("variables", {
+      variablesReference: scope.variablesReference,
+    });
+    variables[scope.name] = varsResp.variables;
+  }
+
+  const methodCtx = extractMethodContext(topFrame.name, variables);
+  const imports = extractImports(topFrame.source?.path ?? "");
+
+  const snapshot: Snapshot = {
+    timestamp: Date.now(),
+    threadId,
+    file: topFrame.source?.path ?? "unknown",
+    className: path.basename(topFrame.source?.path ?? "UnknownClass.java", ".java"),
+    method: methodCtx,
+    line: topFrame.line,
+    variables,
+    imports,
+  };
 
   return snapshot;
 }

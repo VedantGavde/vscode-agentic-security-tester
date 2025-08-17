@@ -2,14 +2,28 @@ import * as vscode from "vscode";
 import * as fs from "fs";
 import * as path from "path";
 
+export interface MethodContext {
+  name: string;
+  signature: string;
+  args: Record<string, any>;
+  returnType: string;
+}
+
 export interface Snapshot {
   timestamp: number;
   threadId: number;
   file: string;
   className: string;
+  method?: MethodContext;
   line: number;
-  category?: string;
   variables: any;
+  imports?: string[];
+}
+
+export interface AnalysisResult {
+  status: "safe" | "unsafe" | "unknown";
+  reasoning: string;
+  category?: string; // e.g. "SQL Injection", "Hardcoded Secret"
 }
 
 /**
@@ -24,21 +38,30 @@ function ensureStateDir(workspaceFolder: vscode.WorkspaceFolder): string {
 }
 
 /**
- * Save a snapshot to disk with auto-incrementing naming.
+ * Save snapshot and AI analysis to disk with auto-incrementing naming.
+ * Filename now includes the analysis status and category if present.
  */
-export async function saveSnapshot(
+export async function saveSnapshotWithAnalysis(
   snapshot: Snapshot,
+  analysis: AnalysisResult,
   workspaceFolder: vscode.WorkspaceFolder
 ): Promise<void> {
   const dir = ensureStateDir(workspaceFolder);
   const baseName = snapshot.className || "Unknown";
   let counter = 1;
 
-  // find next available number
   while (true) {
-    const filename = path.join(dir, `${baseName}_${String(counter).padStart(4, "0")}.json`);
+    const suffix = analysis.category
+      ? `${analysis.status}_${analysis.category.replace(/\s+/g, "-")}`
+      : analysis.status;
+    const filename = path.join(
+      dir,
+      `${baseName}_${String(counter).padStart(4, "0")}_${suffix}.json`
+    );
+
     if (!fs.existsSync(filename)) {
-      fs.writeFileSync(filename, JSON.stringify(snapshot, null, 2));
+      const payload = { ...snapshot, aiAnalysis: analysis };
+      fs.writeFileSync(filename, JSON.stringify(payload, null, 2));
       break;
     }
     counter++;
