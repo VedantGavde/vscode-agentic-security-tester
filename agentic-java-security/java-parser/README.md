@@ -7,15 +7,19 @@ It uses [JavaParser](https://javaparser.org/) and outputs JSON that can be consu
 
 ## Directory Structure
 
+```
 java-parser/
-├── src/main/java/
-│ └── JavaParserCLI.java # CLI wrapper around JavaParser
+├── src/
+│   └── main/
+│       └── java/
+│           └── JavaParserCLI.java   # CLI wrapper around JavaParser
 ├── lib/
-│ ├── javaparser-core-3.25.8.jar
-│ └── gson-2.10.1.jar
-├── build # Compiled .class files
-├── build.sh # Script to build the CLI
-└── README.md # Documentation
+│   ├── javaparser-core-3.25.8.jar
+│   └── gson-2.10.1.jar
+├── build/                           # Compiled .class files
+├── build.sh                         # Script to build the CLI
+└── README.md                        # Documentation
+```
 
 
 ---
@@ -38,7 +42,7 @@ cd java-parser
 ./build.sh
 ```
 
-##Usage
+## Usage
 
 Example test files such as `DummyTest.java` are located under: agentic-java-security/examples
 
@@ -47,7 +51,7 @@ cd java-parser
 java -cp "build:lib/*" JavaParserCLI ../examples/DummyTest.java
 ```
 
-##Notes
+## Notes
 
 DummyTest.java is provided for demonstration and testing only.
 The VS Code extension automatically invokes this parser. Manual builds are only required if JavaParserCLI.java is modified.
