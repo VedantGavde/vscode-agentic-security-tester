@@ -1,16 +1,8 @@
 import * as vscode from "vscode";
 import * as fs from "fs";
 import * as path from "path";
+import * as cp from "child_process";
 
-/**
- * Automatically tries to start a debug session for the given Java file.
- *   1. Detect class name from the file itself
- *   2. Find .vscode/launch.json in that file's workspace
- *   3. Look for a config with matching "mainClass"
- *   4. Call vscode.debug.startDebugging()
- *
- * Returns true if a debug session was successfully started, false otherwise.
- */
 export async function autoStartDebuggingForFile(document: vscode.TextDocument): Promise<boolean> {
   const filePath = document.fileName;
   const className = extractClassNameFromJavaFile(document.getText());
@@ -19,42 +11,61 @@ export async function autoStartDebuggingForFile(document: vscode.TextDocument): 
     return false;
   }
 
-  const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
+  // --- Workspace resolution with fallbacks ---
+  let workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
+
   if (!workspaceFolder) {
-    vscode.window.showWarningMessage(`File is not inside a workspace folder.`);
-    return false;
+    const folders = vscode.workspace.workspaceFolders;
+    if (folders && folders.length > 0) {
+      workspaceFolder = folders[0];
+    }
   }
 
-  const launchJsonPath = path.join(workspaceFolder.uri.fsPath, '.vscode', 'launch.json');
-  if (!fs.existsSync(launchJsonPath)) {
-    vscode.window.showWarningMessage(`No .vscode/launch.json found in workspace.`);
-    return false;
+  if (!workspaceFolder) {
+    // last resort: fake workspace from file's directory
+    workspaceFolder = {
+      uri: vscode.Uri.file(path.dirname(filePath)),
+      name: path.basename(path.dirname(filePath)),
+      index: 0,
+    } as vscode.WorkspaceFolder;
+  }
+
+  // Step 1: Compile the Java file into examples/build
+  const examplesBuild = path.join(path.dirname(filePath), "build");
+
+  if (!fs.existsSync(examplesBuild)) {
+    fs.mkdirSync(examplesBuild, { recursive: true });
   }
 
   try {
-    const launchContent = fs.readFileSync(launchJsonPath, 'utf8');
-    const parsed = JSON.parse(launchContent);
-    const configs: any[] = parsed.configurations ?? [];
+    cp.execSync(`javac -d "${examplesBuild}" "${filePath}"`, {
+      cwd: path.dirname(filePath),
+    });
+    vscode.window.showInformationMessage(`Compiled ${className}.java successfully.`);
+  } catch (err: any) {
+    vscode.window.showErrorMessage(`Compilation failed: ${err.message}`);
+    return false;
+  }
 
-    // Find a config with type=java and matching mainClass
-    const matching = configs.find(cfg => cfg.type === 'java' && cfg.mainClass === className);
-    if (!matching) {
-      vscode.window.showWarningMessage(`No launch.json configuration found for mainClass="${className}".`);
-      return false;
-    }
+  // Step 2: Launch debugger with inline config
+  const config = {
+    type: "java",
+    name: `Run ${className}`,
+    request: "launch",
+    mainClass: className,
+    classPaths: [examplesBuild],
+  };
 
-    // Kick off the debugger
-    const success = await vscode.debug.startDebugging(workspaceFolder, matching);
+  try {
+    const success = await vscode.debug.startDebugging(workspaceFolder, config);
     if (!success) {
       vscode.window.showWarningMessage(`Failed to start Java debug session.`);
       return false;
     }
-
     vscode.window.showInformationMessage(`Started Java debug session for ${className}.`);
     return true;
-
-  } catch (err) {
-    vscode.window.showErrorMessage(`Error reading/parsing launch.json: ${err}`);
+  } catch (err: any) {
+    vscode.window.showErrorMessage(`Error starting debugger: ${err.message}`);
     return false;
   }
 }

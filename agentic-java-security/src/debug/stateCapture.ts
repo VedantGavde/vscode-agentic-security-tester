@@ -8,7 +8,6 @@ import { analyzeWithLLM } from "../ai/llmAnalyzer";
 /**
  * Attach a global debug tracker for Java sessions.
  * Captures a snapshot on every stop, analyzes, saves it, then continues.
- * Logs are kept minimal to avoid noise.
  */
 export function listenForStateCapture() {
   const output = vscode.window.createOutputChannel("State Capture");
@@ -31,26 +30,21 @@ export function listenForStateCapture() {
             const codeSlice = await getCodeContext(snapshot.file, snapshot.line);
             const analysis = await analyzeWithLLM(snapshot, codeSlice);
 
-            // Minimal, single-line logs
             output.appendLine(
               `[Snapshot] ${snapshot.className}:${snapshot.line} | method=${snapshot.method?.signature ?? "?"} | vars=${summarizeLocals(snapshot)}`
             );
             output.appendLine(
-              `[Analysis] status=${analysis.status} | category=${analysis.category ?? "N/A"} | reason=${analysis.reasoning}`
+              `[Analysis] status=${analysis.status} | category=${analysis.category ?? "N/A"}`
             );
 
-            const wsFolder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(snapshot.file));
-            if (wsFolder) {
-              await saveSnapshotWithAnalysis(snapshot, analysis, wsFolder);
-            }
+            // ⬇️ No more passing workspace folder (stateManager decides)
+            await saveSnapshotWithAnalysis(snapshot, analysis);
           } catch (e: any) {
             const msgText = String(e?.message ?? e);
-            // Ignore "No stack frame found" (can happen at program end)
             if (!/No stack frame found/i.test(msgText)) {
               output.appendLine(`[Error] ${msgText}`);
             }
           } finally {
-            // Always continue to keep program running
             try {
               await session.customRequest("continue", { threadId });
             } catch {
@@ -70,14 +64,12 @@ export function listenForStateCapture() {
   });
 }
 
-/** Compact variable summary for the log line. */
 function summarizeLocals(s: Snapshot): string {
   const locals = Array.isArray((s as any).variables?.Local) ? (s as any).variables.Local : [];
   const pairs = locals.map((v: any) => `${v.name}:${v.type || typeof v.value || "?"}`);
   return pairs.join(", ");
 }
 
-/** Code context with sensible bounds and low noise. */
 async function getCodeContext(filePath: string, line: number): Promise<string> {
   try {
     const doc = await vscode.workspace.openTextDocument(filePath);

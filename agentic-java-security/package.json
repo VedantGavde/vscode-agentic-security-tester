@@ -1,21 +1,37 @@
 {
   "name": "agentic-java-security",
-  "displayName": "Java AST Viewer",
-  "description": "Parses Java code into an AST JSON view inside VS Code.",
-  "version": "0.0.1",
+  "displayName": "Agentic Java Security Tester",
+  "description": "Agentic extension that compiles, debugs, captures runtime state, and analyzes Java programs for potential security issues.",
+  "version": "0.1.0",
+  "publisher": "your-name-or-org",
   "engines": {
     "vscode": "^1.103.0"
   },
   "categories": [
-    "Other"
+    "Debuggers",
+    "Programming Languages",
+    "Linters"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onCommand:extension.autoBreakpoint",
+    "onDebugResolve:java",
+    "onLanguage:java",
+    "*"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
       {
         "command": "extension.autoBreakpoint",
-        "title": "Security Test Extension"
+        "title": "Run Java Security Test"
+      }
+    ],
+    "debuggers": [
+      {
+        "type": "java",
+        "label": "Java Debugger with State Capture",
+        "program": "./out/extension.js",
+        "languages": ["java"]
       }
     ]
   },
@@ -30,7 +46,7 @@
   "devDependencies": {
     "@types/mocha": "^10.0.10",
     "@types/node": "22.x",
-    "@types/vscode": "^1.102.0",
+    "@types/vscode": "^1.103.0",
     "@typescript-eslint/eslint-plugin": "^8.39.0",
     "@typescript-eslint/parser": "^8.39.0",
     "@vscode/test-cli": "^0.0.11",
@@ -43,3 +59,4 @@
     "@vscode/debugprotocol": "^1.68.0"
   }
 }
+

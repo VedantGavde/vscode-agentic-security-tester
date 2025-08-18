@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import { parseJavaAst } from "./ast/astParser";
-import { addBreakpointsFromAst } from "./breakpoint/breakpointEngine";
+import { addBreakpointsFromAst } from "./debug/breakpointEngine";
 import { listenForStateCapture } from "./debug/stateCapture";
 import { autoStartDebuggingForFile } from "./debug/launchManager";
 
