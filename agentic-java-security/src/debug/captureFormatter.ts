@@ -16,7 +16,7 @@ export interface RuntimeSnapshot {
 }
 
 /**
- * Extract method signature + args (very basic for Java).
+ * Extract method signature + args.
  */
 function extractMethodContext(frameName: string, variables: any): MethodContext {
   const args: Record<string, any> = {};
@@ -35,7 +35,7 @@ function extractMethodContext(frameName: string, variables: any): MethodContext 
 }
 
 /**
- * Try to collect imports from the source file (best-effort).
+ * Try to collect imports from the source file.
  */
 function extractImports(filePath: string): string[] {
   try {

@@ -37,7 +37,7 @@ export function listenForStateCapture() {
               `[Analysis] status=${analysis.status} | category=${analysis.category ?? "N/A"}`
             );
 
-            // ⬇️ No more passing workspace folder (stateManager decides)
+            
             await saveSnapshotWithAnalysis(snapshot, analysis);
           } catch (e: any) {
             const msgText = String(e?.message ?? e);
@@ -48,7 +48,7 @@ export function listenForStateCapture() {
             try {
               await session.customRequest("continue", { threadId });
             } catch {
-              /* ignore */
+              
             }
           }
         },

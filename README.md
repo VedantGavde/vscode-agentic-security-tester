@@ -23,11 +23,25 @@ It automatically:
 
 ---
 
+# Requirements
+
+- [Visual Studio Code](https://code.visualstudio.com/) (latest) 
+- [Node.js](https://nodejs.org/) v18+ 
+- Java JDK 11+ (used for parsing Java source files)
+- Ollama ([Download Ollama](https://ollama.ai/download))
+
+---
+
 ## Installation
 
-1. Clone or download this repository. 
-2. Run `build.sh` inside the `java-parser` folder.
-3. Run `npm install` inside the `agentic-java-security` folder. 
+1. Download Ollama and install Ollama
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+ollama pull qwen:14b
+```
+2. Clone or download this repository. 
+3. Run `build.sh` inside the `java-parser` folder.
+4. Run `npm install` inside the `agentic-java-security` folder. 
 
 ---
 
@@ -103,14 +117,6 @@ Each file contains:
   }
 }
 ```
-
----
-
-# Requirements
-
-- [Visual Studio Code](https://code.visualstudio.com/) (latest) 
-- [Node.js](https://nodejs.org/) v18+ 
-- Java JDK 11+ (used for parsing Java source files) 
 
 ---
 
