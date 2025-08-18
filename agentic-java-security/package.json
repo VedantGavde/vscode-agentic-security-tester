@@ -1,5 +1,5 @@
 {
-  "name": "java-ast-viewer",
+  "name": "agentic-java-security",
   "displayName": "Java AST Viewer",
   "description": "Parses Java code into an AST JSON view inside VS Code.",
   "version": "0.0.1",
