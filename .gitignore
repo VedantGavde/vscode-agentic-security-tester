@@ -3,3 +3,4 @@ out/
 java-parser/build/
 *.class
 **/states/
+.env

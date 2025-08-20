@@ -1,4 +1,6 @@
 import * as vscode from "vscode";
+// Load environment variables
+import "dotenv/config";
 import { parseJavaAst } from "./ast/astParser";
 import { addBreakpointsFromAst } from "./debug/breakpointEngine";
 import { listenForStateCapture } from "./debug/stateCapture";
@@ -22,7 +24,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     try {
       // 1: Parse AST
-      const astJson = await parseJavaAst(filePath, context);
+      const astJson = await parseJavaAst(filePath);
 
       // 2: Inject breakpoints
       await addBreakpointsFromAst(astJson, document.uri);

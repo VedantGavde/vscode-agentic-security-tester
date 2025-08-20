@@ -1,32 +1,29 @@
-import * as path from "path";
-import * as cp from "child_process";
 import * as vscode from "vscode";
 
 /**
- * Runs JavaParserCLI on a .java file and returns parsed JSON AST.
+ * Uses VS Code's built-in documentSymbolProvider (from the Java language server)
+ * to obtain a lightweight AST-like structure for the Java file.
+ *
+ * Each symbol includes: name, kind (Class/Method/Field/etc.) and source range.
  */
-export async function parseJavaAst(
-  filePath: string,
-  context: vscode.ExtensionContext
-): Promise<any> {
-  return new Promise((resolve, reject) => {
-    const parserFolder = path.join(context.extensionPath, "java-parser");
-    const sep = process.platform === "win32" ? ";" : ":";
+export async function parseJavaAst(filePath: string): Promise<vscode.DocumentSymbol[]> {
+  const uri = vscode.Uri.file(filePath);
 
-    // Use build (for .class) + lib/* (for dependencies)
-    const cmd = `java -cp "build${sep}lib/*" JavaParserCLI "${filePath}"`;
+  try {
+    const symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
+      "vscode.executeDocumentSymbolProvider",
+      uri
+    );
 
-    cp.exec(cmd, { cwd: parserFolder }, (err, stdout, stderr) => {
-      if (err) {
-        return reject(new Error(stderr || err.message));
-      }
-      try {
-        const json = JSON.parse(stdout);
-        resolve(json);
-      } catch (parseErr) {
-        reject(new Error("Failed to parse JSON from JavaParserCLI"));
-      }
-    });
-  });
+    if (!symbols) {
+      throw new Error("No symbol information returned");
+    }
+    return symbols;
+  } catch (err) {
+    vscode.window.showErrorMessage(
+      `Could not retrieve Java symbols for ${filePath}: ${String(err)}`
+    );
+    throw err;
+  }
 }
 
