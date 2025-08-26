@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 // Load environment variables
 import "dotenv/config";
 import { parseJavaAst } from "./ast/astParser";
-import { addBreakpointsFromAst } from "./debug/breakpointEngine";
+import { analyzeAndAddBreakpoints } from "./debug/breakpointEngine"; 
 import { listenForStateCapture } from "./debug/stateCapture";
 import { autoStartDebuggingForFile } from "./debug/launchManager";
 
@@ -23,11 +23,12 @@ export function activate(context: vscode.ExtensionContext) {
     }
 
     try {
-      // 1: Parse AST
-      const astJson = await parseJavaAst(filePath);
+      // 1: Parse AST once
+      const astJson = await parseJavaAst(filePath, context);
+      console.log("[Extension] Parsed AST:", astJson);
 
-      // 2: Inject breakpoints
-      await addBreakpointsFromAst(astJson, document.uri);
+      // 2: Inject breakpoints (pass AST directly, not filePath)
+      await analyzeAndAddBreakpoints(astJson, document.uri);
       vscode.window.showInformationMessage("Breakpoints injected successfully.");
 
       // 3: Auto-start debugging session for this Java file
@@ -39,6 +40,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
     } catch (err: any) {
       vscode.window.showErrorMessage(err?.message ?? "Unexpected error");
+      console.error("[Extension] Error:", err);
     }
   });
 

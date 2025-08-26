@@ -1,29 +1,37 @@
+import * as fs from "fs";
+import * as path from "path";
 import * as vscode from "vscode";
+import { exec } from "child_process";
 
-/**
- * Uses VS Code's built-in documentSymbolProvider (from the Java language server)
- * to obtain a lightweight AST-like structure for the Java file.
- *
- * Each symbol includes: name, kind (Class/Method/Field/etc.) and source range.
- */
-export async function parseJavaAst(filePath: string): Promise<vscode.DocumentSymbol[]> {
-  const uri = vscode.Uri.file(filePath);
+export async function parseJavaAst(
+  filePath: string,
+  context: vscode.ExtensionContext
+): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const parserFolder = path.join(context.extensionPath, "java-parser");
+    const sep = process.platform === "win32" ? ";" : ":";
 
-  try {
-    const symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
-      "vscode.executeDocumentSymbolProvider",
-      uri
-    );
+    // Base output file (Java CLI appends .pretty.json and .min.json)
+    const baseOutPath = path.join(context.extensionPath, "ast-output.json");
+    const minOutPath = baseOutPath.replace(".json", ".min.json");
 
-    if (!symbols) {
-      throw new Error("No symbol information returned");
-    }
-    return symbols;
-  } catch (err) {
-    vscode.window.showErrorMessage(
-      `Could not retrieve Java symbols for ${filePath}: ${String(err)}`
-    );
-    throw err;
-  }
+    const cmd = `java -cp "build${sep}lib/*" JavaParserCLI "${filePath}" "${baseOutPath}"`;
+
+    exec(cmd, { cwd: parserFolder }, (err, stdout, stderr) => {
+      if (err) {
+        return reject(new Error(stderr || err.message));
+      }
+      try {
+        // Read the minified JSON AST back into memory
+        const raw = fs.readFileSync(minOutPath, "utf8");
+        const json = JSON.parse(raw);
+
+        console.log(`[AST Parser] AST written to: ${minOutPath}`);
+        resolve(json);
+      } catch (parseErr) {
+        reject(new Error("Failed to parse JSON from JavaParserCLI output"));
+      }
+    });
+  });
 }
 

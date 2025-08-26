@@ -1,37 +1,72 @@
 // src/ai/aiBreakpointPlanner.ts
 
-import * as vscode from "vscode";
+import OpenAI from "openai";
 
-/**
- * Recursively walk the DocumentSymbol tree to extract method entry lines.
- */
-function extractMethodEntries(symbols: vscode.DocumentSymbol[]): Array<{ line: number; reason: string }> {
-  const result: Array<{ line: number; reason: string }> = [];
+const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-  for (const sym of symbols) {
-    if (sym.kind === vscode.SymbolKind.Method) {
-      // VS Code line numbers are 0-based, but our breakpoint code adjusts it.
-      result.push({
-        line: (sym.selectionRange?.start.line ?? sym.range.start.line) + 1, // convert to 1-based
-        reason: "methodEntry",
-      });
-    }
+export async function planBreakpoints(
+  ast: any
+): Promise<Array<{ line: number; reason: string }>> {
+  try {
+    console.log("[AI Planner] Sending full AST to LLM...");
 
-    if (sym.children && sym.children.length > 0) {
-      result.push(...extractMethodEntries(sym.children));
-    }
+    const prompt = `
+You are a senior Java security auditor. You will receive the full AST of a Java source file.
+
+Your task:
+1. Analyze the AST carefully.
+2. Identify *lines of code* where inserting breakpoints during debugging could reveal unsafe or insecure conditions.
+3. Think beyond known categories. If you see novel or surprising risky behavior, include it.
+4. Return only JSON matching the schema below.
+`;
+
+    // Schema must be an object at the root
+    const schema = {
+      name: "breakpoints_schema",
+      schema: {
+        type: "object",
+        properties: {
+          breakpoints: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                line: { type: "integer" },
+                reason: { type: "string" }
+              },
+              required: ["line", "reason"],
+              additionalProperties: false
+            }
+          }
+        },
+        required: ["breakpoints"],
+        additionalProperties: false
+      }
+    };
+
+    const completion = await client.chat.completions.create({
+      model: "gpt-5-mini",
+      messages: [
+        { role: "system", content: "You are an expert security-focused code reviewer." },
+        { role: "user", content: prompt },
+        { role: "user", content: JSON.stringify(ast) }
+      ],
+      response_format: { type: "json_schema", json_schema: schema }
+    });
+
+    const raw = completion.choices[0].message?.content;
+    if (!raw) throw new Error("Empty response from LLM");
+
+    const parsed = JSON.parse(raw) as { breakpoints: Array<{ line: number; reason: string }> };
+
+    console.log("[AI Planner] Planned breakpoints:", parsed.breakpoints);
+
+    
+
+    return parsed.breakpoints;
+  } catch (err) {
+    console.error("[AI Planner] Error:", err);
+    return [];
   }
-
-  return result;
-}
-
-/**
- * Eventually this will call GPT-4o with the AST to decide *where* to break.
- * For day-1 we fallback to "break at all method entries".
- */
-export async function planBreakpoints(astSymbols: vscode.DocumentSymbol[]): Promise<Array<{ line: number; reason: string }>> {
-  const fallback = extractMethodEntries(astSymbols);
-  console.log("[AI-Planner fallback] Planning breakpoints at method entries:", fallback);
-  return fallback;
 }
 
