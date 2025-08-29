@@ -45,7 +45,7 @@ Your task:
     };
 
     const completion = await client.chat.completions.create({
-      model: "gpt-5-mini",
+      model: "gpt-5-mini", //200,000 TPM limit
       messages: [
         { role: "system", content: "You are an expert security-focused code reviewer." },
         { role: "user", content: prompt },
