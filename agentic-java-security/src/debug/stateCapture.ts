@@ -5,10 +5,10 @@ import { buildSnapshot } from "./captureFormatter";
 import { Snapshot, saveSnapshotWithAnalysis } from "../storage/stateManager";
 import { analyzeWithLLM } from "../ai/llmAnalyzer";
 import { decideNextAction, DebugAction } from "../ai/aiDebuggerBrain";
+import { getBreakpointMetadata } from "./breakpointEngine";
 
 /**
  * Attach a global debug tracker for Java sessions.
- * Captures a snapshot on every stop, analyzes it, saves it, then asks AI what to do next.
  */
 export function listenForStateCapture() {
   const output = vscode.window.createOutputChannel("State Capture");
@@ -19,7 +19,6 @@ export function listenForStateCapture() {
 
       return {
         onDidSendMessage: async (msg) => {
-          // only interested in genuine break events
           if (msg.event !== "stopped") return;
 
           const threadId = msg.body?.threadId;
@@ -29,17 +28,27 @@ export function listenForStateCapture() {
           let snapshot: Snapshot | null = null;
 
           try {
-            // build runtime snapshot
             snapshot = await buildSnapshot(session, threadId, reason);
 
-            // provide code context for LLM
-            const codeSlice = await getCodeContext(snapshot.file, snapshot.line);
+            // Find which breakpoint triggered this stop
+            const triggered = vscode.debug.breakpoints.find(
+              (bp) =>
+                bp instanceof vscode.SourceBreakpoint &&
+                bp.location.uri.fsPath === snapshot?.file &&
+                bp.location.range.start.line === (snapshot?.line ?? 0) - 1
+            ) as vscode.SourceBreakpoint | undefined;
 
-            // let LLM analyze
-            const analysis = await analyzeWithLLM(snapshot, codeSlice);
+            let requestedState: string[] = [];
+            if (triggered) {
+              const meta = getBreakpointMetadata(triggered.id);
+              requestedState = meta?.requestedState ?? [];
+            }
+
+            // Just send the snapshot (no code context)
+            const analysis = await analyzeWithLLM(snapshot);
 
             output.appendLine(
-              `[Snapshot] ${snapshot.className}:${snapshot.line} | ${snapshot.method?.signature ?? "?"} | vars=${summarizeLocals(snapshot)}`
+              `[Snapshot] ${snapshot.className}:${snapshot.line} | requestedState=${requestedState.join(", ") || "none"}`
             );
             output.appendLine(
               `[Analysis] status=${analysis.status} | category=${analysis.category ?? "N/A"}`
@@ -52,7 +61,6 @@ export function listenForStateCapture() {
               output.appendLine(`[Error] ${msgText}`);
             }
           } finally {
-            // ask AI which debug action to take next
             try {
               const action: DebugAction = await decideNextAction(snapshot);
               if (action === "continue") {
@@ -66,7 +74,6 @@ export function listenForStateCapture() {
               } else if (action === "stop") {
                 await session.customRequest("terminate");
               } else if (typeof action === "object" && action.action === "addBreakpoint") {
-                // insert breakpoint mid-debug
                 const bp = new vscode.SourceBreakpoint(
                   new vscode.Location(
                     vscode.Uri.file(snapshot?.file || ""),
@@ -75,11 +82,9 @@ export function listenForStateCapture() {
                   true
                 );
                 vscode.debug.addBreakpoints([bp]);
-                // then resume
                 await session.customRequest("continue", { threadId });
               }
             } catch {
-              // failsafe, just resume
               await session.customRequest("continue", { threadId });
             }
           }
@@ -94,24 +99,5 @@ export function listenForStateCapture() {
   vscode.debug.onDidTerminateDebugSession((s) => {
     output.appendLine(`=== Debug Session Ended: ${s.name} ===`);
   });
-}
-
-function summarizeLocals(s: Snapshot): string {
-  const locals = Array.isArray((s as any).variables?.Local) ? (s as any).variables.Local : [];
-  return locals.map((v: any) => `${v.name}:${v.type || typeof v.value || "?"}`).join(", ");
-}
-
-async function getCodeContext(filePath: string, line: number): Promise<string> {
-  try {
-    const doc = await vscode.workspace.openTextDocument(filePath);
-    const before = 40, after = 40;
-    const start = Math.max(0, line - before);
-    const end = Math.min(doc.lineCount, line + after);
-    const lines: string[] = [];
-    for (let i = start; i < end; i++) lines.push(doc.lineAt(i).text);
-    return lines.join("\n");
-  } catch {
-    return "";
-  }
 }
 
