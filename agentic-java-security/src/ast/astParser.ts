@@ -11,23 +11,29 @@ export async function parseJavaAst(
     const parserFolder = path.join(context.extensionPath, "java-parser");
     const sep = process.platform === "win32" ? ";" : ":";
 
-    // Base output file (Java CLI appends .pretty.json and .min.json)
-    const baseOutPath = path.join(context.extensionPath, "ast-output.json");
-    const minOutPath = baseOutPath.replace(".json", ".min.json");
+    const prettyOutPath = path.join(context.extensionPath, "ast-output-pretty.json");
+    const minOutPath = path.join(context.extensionPath, "ast-output-min.json");
 
-    const cmd = `java -cp "build${sep}lib/*" JavaParserCLI "${filePath}" "${baseOutPath}"`;
+    // Run Java CLI to produce pretty JSON
+    const cmd = `java -cp "build${sep}lib/*" JavaParserCLI "${filePath}" "${prettyOutPath}"`;
 
     exec(cmd, { cwd: parserFolder }, (err, stdout, stderr) => {
       if (err) {
         return reject(new Error(stderr || err.message));
       }
-      try {
-        // Read the minified JSON AST back into memory
-        const raw = fs.readFileSync(minOutPath, "utf8");
-        const json = JSON.parse(raw);
 
-        console.log(`[AST Parser] AST written to: ${minOutPath}`);
-        resolve(json);
+      try {
+        // Read prettified JSON written by JavaParserCLI
+        const prettyRaw = fs.readFileSync(prettyOutPath, "utf8");
+        const astObj = JSON.parse(prettyRaw);
+
+        // Save a minified version (just for inspection)
+        fs.writeFileSync(minOutPath, JSON.stringify(astObj), "utf8");
+
+        console.log(`[AST Parser] Prettified AST: ${prettyOutPath}`);
+        console.log(`[AST Parser] Minified AST:   ${minOutPath}`);
+
+        resolve(astObj); // return object (already minifiable in memory)
       } catch (parseErr) {
         reject(new Error("Failed to parse JSON from JavaParserCLI output"));
       }
